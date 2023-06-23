@@ -73,7 +73,42 @@ mkFold aenv repr f z acc = case z of
   where
     codeFold = case repr of
       ArrayR ShapeRz tp -> mkFoldAll aenv tp   f z acc
-      _                 -> mkFoldDim aenv repr f z acc
+      _                 -> mkFoldSimple aenv repr f z acc
+
+mkFoldSimple
+    :: forall aenv sh e.
+       UID
+    -> Gamma aenv                                     -- ^ array environment
+    -> ArrayR (Array sh e)
+    -> IRFun2     PTX aenv (e -> e -> e)              -- ^ combination function
+    -> MIRExp     PTX aenv e                          -- ^ (optional) seed element, if this is an exclusive reduction
+    -> MIRDelayed PTX aenv (Array (sh, Int) e)        -- ^ input data
+    -> CodeGen    PTX      (IROpenAcc PTX aenv (Array sh e))
+mkFoldSimple uid aenv repr@(ArrayR shr tp) combine mseed marr = do
+  dev <- liftCodeGen $ gets ptxDeviceProperties
+  --
+  let
+      (arrOut, paramOut)  = mutableArray repr "out"
+      (arrIn,  paramIn)   = delayedArray "in" marr
+      paramEnv            = envParam aenv
+      --
+      config              = launchConfig dev (CUDA.incWarp dev) smem const [|| const ||]
+      smem n
+        | canShfl dev     = warps * bytes
+        | otherwise       = warps * (1 + per_warp) * bytes
+        where
+          ws        = CUDA.warpSize dev
+          warps     = n `P.quot` ws
+          per_warp  = ws + ws `P.quot` 2
+          bytes     = bytesElt tp
+  --
+  makeOpenAccWith config uid "FOLD" (paramOut ++ paramIn ++ paramEnv) $ do
+    tid        <- threadIdx
+    z          <- int (liftInt32 0)
+    firstElem  <- app1 (delayedLinearIndex arrIn) z
+    when (A.eq singleType tid (liftInt32 0)) $
+      writeArray TypeInt32 arrOut tid firstElem
+    return_
 
 
 -- Reduce an array to a single element.
