@@ -259,7 +259,7 @@ foldCore
     -> Par PTX (Future (Array sh e))
 foldCore repr exe gamma aenv arr
   | ArrayR ShapeRz tp <- repr
-  = foldAllOp tp exe gamma aenv arr
+  = foldDimOp repr exe gamma aenv arr
   --
   | otherwise
   = foldDimOp repr exe gamma aenv arr
@@ -334,7 +334,7 @@ foldDimOp repr@(ArrayR shr tp) exe gamma aenv input@(delayedShape -> (sh, sz))
       result <- allocateRemote repr sh
       --
       let paramsR = TupRsingle (ParamRarray repr) `TupRpair` TupRsingle (ParamRmaybe $ ParamRarray $ ArrayR (ShapeRsnoc shr) tp)
-      executeOp (ptxExecutable !# "fold") gamma aenv shr sh paramsR (result, manifest input)
+      executeOp (ptxExecutable !# "FOLD") gamma aenv shr sh paramsR (result, manifest input)
       put future result
       return future
 
