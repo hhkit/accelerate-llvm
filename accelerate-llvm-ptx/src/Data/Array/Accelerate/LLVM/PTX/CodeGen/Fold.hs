@@ -103,8 +103,16 @@ mkFoldSimple aenv repr@(ArrayR shr tp) combine mseed marr = do
     tid        <- threadIdx
     z          <- int (liftInt32 0)
     firstElem  <- app1 (delayedLinearIndex arrIn) z
-    when (A.eq singleType tid (liftInt32 0)) $
-      writeArray TypeInt32 arrOut tid firstElem
+    init <- case mseed of
+            Nothing -> return firstElem
+            Just z  -> flip (app2 combine) firstElem =<< z
+    end   <- shapeSize shr (irArrayShape arrOut)
+    when (A.eq singleType tid (liftInt32 0)) $ do
+      accum <- Loop.iterFromStepTo tp (liftInt 1) (liftInt 1) end init
+        $ \it acc -> do 
+          nextElem <- app1 (delayedLinearIndex arrIn) it
+          app2 combine nextElem acc
+      writeArray TypeInt32 arrOut (liftInt32 0) accum
     return_
 
 
