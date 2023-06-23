@@ -106,7 +106,7 @@ mkFoldSimple aenv repr@(ArrayR shr tp) combine mseed marr = do
     init <- case mseed of
             Nothing -> return firstElem
             Just z  -> flip (app2 combine) firstElem =<< z
-    end   <- shapeSize shr (irArrayShape arrOut)
+    end      <- indexHead <$> delayedExtent arrIn
     when (A.eq singleType tid (liftInt32 0)) $ do
       accum <- Loop.iterFromStepTo tp (liftInt 1) (liftInt 1) end init
         $ \it acc -> do 
